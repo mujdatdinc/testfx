@@ -38,7 +38,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
         /// <summary>
         /// The directories to look for assemblies to resolve.
         /// </summary>
-        private List<string> searchDirectories;
+        private List<RecursiveDirectoryPath> searchDirectories;
 
         /// <summary>
         /// Dictionary of Assemblies discovered to date.
@@ -74,7 +74,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
                 throw new ArgumentNullException("directories");
             }
 
-            this.searchDirectories = new List<string>(directories);
+            this.searchDirectories = new List<RecursiveDirectoryPath>(directories.Select(a => new RecursiveDirectoryPath(a, false, false)));
             this.directoryList = new Queue<RecursiveDirectoryPath>();
 
             AppDomain.CurrentDomain.AssemblyResolve += new ResolveEventHandler(this.OnResolve);
@@ -164,7 +164,8 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
         /// </summary>
         /// <param name="path"> Path go get subdirectories for. </param>
         /// <param name="searchDirectories"> The search Directories. </param>
-        internal void AddSubdirectories(string path, List<string> searchDirectories)
+        /// <param name="matchversion">Match the assembly versions. </param>
+        internal void AddSubdirectories(string path, List<RecursiveDirectoryPath> searchDirectories, bool matchversion)
         {
             Debug.Assert(!string.IsNullOrEmpty(path), "'path' cannot be null or empty.");
             Debug.Assert(searchDirectories != null, "'searchDirectories' cannot be null.");
@@ -178,9 +179,9 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
                 // Add each directory and its subdirectories to the collection.
                 foreach (var directory in directories)
                 {
-                    searchDirectories.Add(directory);
+                    searchDirectories.Add(new RecursiveDirectoryPath(directory, false, matchversion));
 
-                    this.AddSubdirectories(directory, searchDirectories);
+                    this.AddSubdirectories(directory, searchDirectories, matchversion);
                 }
             }
         }
@@ -253,7 +254,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
         /// <param name="name"> The name. </param>
         /// <param name="isReflectionOnly"> Indicates whether this is called under a Reflection Only Load context. </param>
         /// <returns> The <see cref="Assembly"/>. </returns>
-        protected virtual Assembly SearchAssembly(List<string> searchDirectorypaths, string name, bool isReflectionOnly)
+        protected virtual Assembly SearchAssembly(List<RecursiveDirectoryPath> searchDirectorypaths, string name, bool isReflectionOnly)
         {
             if (searchDirectorypaths == null || searchDirectorypaths.Count == 0)
             {
@@ -273,15 +274,15 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
                 this.SafeLog(
                     name,
                     () =>
+                    {
+                        if (EqtTrace.IsInfoEnabled)
                         {
-                            if (EqtTrace.IsInfoEnabled)
-                            {
-                                EqtTrace.Info(
-                                    "AssemblyResolver: {0}: Failed to create assemblyName. Reason:{1} ",
-                                    name,
-                                    ex);
-                            }
-                        });
+                            EqtTrace.Info(
+                                "AssemblyResolver: {0}: Failed to create assemblyName. Reason:{1} ",
+                                name,
+                                ex);
+                        }
+                    });
 
                 return null;
             }
@@ -290,7 +291,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
 
             foreach (var dir in searchDirectorypaths)
             {
-                if (string.IsNullOrEmpty(dir))
+                if (string.IsNullOrEmpty(dir.DirectoryPath))
                 {
                     continue;
                 }
@@ -298,18 +299,18 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
                 this.SafeLog(
                     name,
                     () =>
+                    {
+                        if (EqtTrace.IsVerboseEnabled)
                         {
-                            if (EqtTrace.IsVerboseEnabled)
-                            {
-                                EqtTrace.Verbose("AssemblyResolver: Searching assembly: {0} in the directory: {1}", requestedName.Name, dir);
-                            }
-                        });
+                            EqtTrace.Verbose("AssemblyResolver: Searching assembly: {0} in the directory: {1}", requestedName.Name, dir);
+                        }
+                    });
 
                 foreach (var extension in new string[] { ".dll", ".exe" })
                 {
-                    var assemblyPath = Path.Combine(dir, requestedName.Name + extension);
+                    var assemblyPath = Path.Combine(dir.DirectoryPath, requestedName.Name + extension);
 
-                    var assembly = this.SearchAndLoadAssembly(assemblyPath, name, requestedName, isReflectionOnly);
+                    var assembly = this.SearchAndLoadAssembly(assemblyPath, name, requestedName, isReflectionOnly, dir.MatchVersions);
                     if (assembly != null)
                     {
                         return assembly;
@@ -326,8 +327,9 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
         /// </summary>
         /// <param name="requestedName"> The requested Name. </param>
         /// <param name="foundName"> The found Name. </param>
+        /// /// <param name="matchversion">Match the versions of the assemblies. </param>
         /// <returns> The <see cref="bool"/>. </returns>
-        private static bool RequestedAssemblyNameMatchesFound(AssemblyName requestedName, AssemblyName foundName)
+        private static bool RequestedAssemblyNameMatchesFound(AssemblyName requestedName, AssemblyName foundName, bool matchversion)
         {
             Debug.Assert(requestedName != null, "requested assembly name should not be null.");
             Debug.Assert(foundName != null, "found assembly name should not be null.");
@@ -350,7 +352,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
                 }
             }
 
-            return requestedName.Version == null || requestedName.Version.Equals(foundName.Version);
+            return !matchversion || requestedName.Version == null || requestedName.Version.Equals(foundName.Version);
         }
 
         /// <summary>
@@ -364,7 +366,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
             IEnumerable<string> fileNames = WindowsRuntimeMetadata.ResolveNamespace(
                 args.NamespaceName,
                 null,   // Will use OS installed .winmd files, you can pass explicit Windows SDK path here for searching 1st party WinRT types
-                this.searchDirectories);  // You can pass package graph paths, they will be used for searching .winmd files with 3rd party WinRT types
+                this.searchDirectories.Select(a => a.DirectoryPath));  // You can pass package graph paths, they will be used for searching .winmd files with 3rd party WinRT types
 
             foreach (string fileName in fileNames)
             {
@@ -437,16 +439,16 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
                         // instead of loading whole search directory in one time, we are adding directory on the basis of need
                         var currentNode = this.directoryList.Dequeue();
 
-                        List<string> increamentalSearchDirectory = new List<string>();
+                        List<RecursiveDirectoryPath> increamentalSearchDirectory = new List<RecursiveDirectoryPath>();
 
                         if (this.DoesDirectoryExist(currentNode.DirectoryPath))
                         {
-                            increamentalSearchDirectory.Add(currentNode.DirectoryPath);
+                            increamentalSearchDirectory.Add(new RecursiveDirectoryPath(currentNode.DirectoryPath, false, currentNode.MatchVersions));
 
                             if (currentNode.IncludeSubDirectories)
                             {
                                 // Add all its sub-directory in depth first search order.
-                                this.AddSubdirectories(currentNode.DirectoryPath, increamentalSearchDirectory);
+                                this.AddSubdirectories(currentNode.DirectoryPath, increamentalSearchDirectory, currentNode.MatchVersions);
                             }
 
                             // Add this directory list in this.searchDirectories so that when we will try to resolve some other
@@ -590,10 +592,11 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
         /// <param name="assemblyName"> The assembly Name. </param>
         /// <param name="requestedName"> The requested Name. </param>
         /// <param name="isReflectionOnly"> Indicates whether this is called under a Reflection Only Load context. </param>
+        /// <param name="matchversions"> Match the versions of the assemblies</param>
         /// <returns> The <see cref="Assembly"/>. </returns>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Reliability", "CA2001:AvoidCallingProblematicMethods", MessageId = "System.Reflection.Assembly.LoadFrom", Justification = "The assembly location is figured out from the configuration that the user passes in.")]
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1031:DoNotCatchGeneralExceptionTypes", Justification = "Requirement is to handle all kinds of user exceptions and message appropriately.")]
-        private Assembly SearchAndLoadAssembly(string assemblyPath, string assemblyName, AssemblyName requestedName, bool isReflectionOnly)
+        private Assembly SearchAndLoadAssembly(string assemblyPath, string assemblyName, AssemblyName requestedName, bool isReflectionOnly, bool matchversions)
         {
             try
             {
@@ -604,7 +607,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
 
                 var foundName = AssemblyName.GetAssemblyName(assemblyPath);
 
-                if (!RequestedAssemblyNameMatchesFound(requestedName, foundName))
+                if (!RequestedAssemblyNameMatchesFound(requestedName, foundName, matchversions))
                 {
                     return null; // File exists but version/public key is wrong. Try next extension.
                 }
@@ -625,12 +628,12 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
                 this.SafeLog(
                     assemblyName,
                     () =>
+                    {
+                        if (EqtTrace.IsInfoEnabled)
                         {
-                            if (EqtTrace.IsInfoEnabled)
-                            {
-                                EqtTrace.Info("AssemblyResolver: Resolved assembly: {0}. ", assemblyName);
-                            }
-                        });
+                            EqtTrace.Info("AssemblyResolver: Resolved assembly: {0}. ", assemblyName);
+                        }
+                    });
                 return assembly;
             }
             catch (FileLoadException ex)
@@ -638,12 +641,12 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
                 this.SafeLog(
                     assemblyName,
                     () =>
+                    {
+                        if (EqtTrace.IsInfoEnabled)
                         {
-                            if (EqtTrace.IsInfoEnabled)
-                            {
-                                EqtTrace.Info("AssemblyResolver: Failed to load assembly: {0}. Reason:{1} ", assemblyName, ex);
-                            }
-                        });
+                            EqtTrace.Info("AssemblyResolver: Failed to load assembly: {0}. Reason:{1} ", assemblyName, ex);
+                        }
+                    });
 
                 // Re-throw FileLoadException, because this exception means that the assembly
                 // was found, but could not be loaded. This will allow us to report a more
@@ -656,12 +659,12 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
                 this.SafeLog(
                     assemblyName,
                     () =>
+                    {
+                        if (EqtTrace.IsInfoEnabled)
                         {
-                            if (EqtTrace.IsInfoEnabled)
-                            {
-                                EqtTrace.Info("AssemblyResolver: Failed to load assembly: {0}. Reason:{1} ", assemblyName, ex);
-                            }
-                        });
+                            EqtTrace.Info("AssemblyResolver: Failed to load assembly: {0}. Reason:{1} ", assemblyName, ex);
+                        }
+                    });
             }
 
             return null;

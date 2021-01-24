@@ -31,10 +31,12 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
         /// <param name="includeSubDirectories">
         /// True if to include subdirectory else false
         /// </param>
-        public RecursiveDirectoryPath(string dirPath, bool includeSubDirectories)
+        /// <param name="matchversions">Match versions of the assemblies</param>
+        public RecursiveDirectoryPath(string dirPath, bool includeSubDirectories, bool matchversions)
         {
             this.DirectoryPath = dirPath;
             this.IncludeSubDirectories = includeSubDirectories;
+            this.MatchVersions = matchversions;
         }
 
         /// <summary>
@@ -46,6 +48,11 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
         /// Gets a value indicating whether to include sub directories.
         /// </summary>
         public bool IncludeSubDirectories { get; private set; }
+
+        /// <summary>
+        /// Gets a value indicating whether assembly verstions would match
+        /// </summary>
+        public bool MatchVersions { get; }
 
         /// <summary>
         /// Returns object to be used for controlling lifetime, null means infinite lifetime.

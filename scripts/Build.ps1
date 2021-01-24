@@ -291,6 +291,6 @@ function Create-NugetPackages
 }
 
 Print-Help
-Perform-Restore
+#Perform-Restore
 Perform-Build
 Create-NugetPackages
