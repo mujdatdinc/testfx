@@ -161,7 +161,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
 
                 if (!string.IsNullOrEmpty(directorypath))
                 {
-                    directoriesList.Add(new RecursiveDirectoryPath(directorypath, recPath.IncludeSubDirectories));
+                    directoriesList.Add(new RecursiveDirectoryPath(directorypath, recPath.IncludeSubDirectories, recPath.MatchVersions));
                 }
             }
 
@@ -286,6 +286,8 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
                     {
                         string recursiveAttribute = reader.GetAttribute("includeSubDirectories");
 
+                        string matchversionAttribute = reader.GetAttribute("matchVersions") ?? "true";
+
                         // read the path specified
                         string path = reader.GetAttribute("path");
 
@@ -293,7 +295,9 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
                         {
                             // Do we have to look in sub directory for dependent dll.
                             var includeSubDirectories = string.Compare(recursiveAttribute, "true", StringComparison.OrdinalIgnoreCase) == 0;
-                            this.SearchDirectories.Add(new RecursiveDirectoryPath(path, includeSubDirectories));
+
+                            var matchversion = string.Compare(matchversionAttribute, "true", StringComparison.OrdinalIgnoreCase) == 0;
+                            this.SearchDirectories.Add(new RecursiveDirectoryPath(path, includeSubDirectories, matchversion));
                         }
                     }
                     else

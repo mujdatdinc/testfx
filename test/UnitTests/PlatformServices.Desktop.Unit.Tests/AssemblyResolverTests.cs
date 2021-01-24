@@ -26,7 +26,7 @@ namespace MSTestAdapter.PlatformServices.Desktop.UnitTests
         {
             // Arrange.
             string path = @"C:\unitTesting";
-            List<string> searchDirectories = new List<string>();
+            List<RecursiveDirectoryPath> searchDirectories = new List<RecursiveDirectoryPath>();
 
             List<string> resultDirectories = new List<string>();
             resultDirectories.Add(@"C:\unitTesting\a");
@@ -56,7 +56,7 @@ namespace MSTestAdapter.PlatformServices.Desktop.UnitTests
             };
 
             // Act.
-            assemblyResolver.AddSubdirectories(path, searchDirectories);
+            assemblyResolver.AddSubdirectories(path, searchDirectories, true);
 
             // Assert.
             Assert.AreEqual(4, searchDirectories.Count, "searchDirectories should have only 5 elements");
@@ -70,8 +70,8 @@ namespace MSTestAdapter.PlatformServices.Desktop.UnitTests
             int count = 0;
 
             List<RecursiveDirectoryPath> recursiveDirectoryPath = new List<RecursiveDirectoryPath>();
-            recursiveDirectoryPath.Add(new RecursiveDirectoryPath(@"C:\unitTesting", true));
-            recursiveDirectoryPath.Add(new RecursiveDirectoryPath(@"C:\FunctionalTesting", false));
+            recursiveDirectoryPath.Add(new RecursiveDirectoryPath(@"C:\unitTesting", true, true));
+            recursiveDirectoryPath.Add(new RecursiveDirectoryPath(@"C:\FunctionalTesting", false, true));
 
             List<string> dummyDirectories = new List<string>();
             dummyDirectories.Add(@"c:\dummy");
@@ -105,7 +105,7 @@ namespace MSTestAdapter.PlatformServices.Desktop.UnitTests
                         // First time SearchAssemblyInTheFollowingLocation should get call with one directory which is in
                         // m_searchDirectories variable
                         Assert.AreEqual(1, listPath.Count);
-                        Assert.AreEqual(0, string.Compare(listPath[0], dummyDirectories[0], true));
+                        Assert.AreEqual(0, string.Compare(listPath[0].DirectoryPath, dummyDirectories[0], true));
                         count++;
                     }
                     else if (count == 1)
@@ -113,9 +113,9 @@ namespace MSTestAdapter.PlatformServices.Desktop.UnitTests
                         // Second time SearchAssemblyInTheFollowingLocation should get call with directory C:\unitTesting
                         // and with all its sub directory, as its isRecursive property is true
                         Assert.AreEqual(3, listPath.Count);
-                        Assert.AreEqual(0, string.Compare(listPath[0], @"C:\unitTesting", true));
-                        Assert.AreEqual(0, string.Compare(listPath[1], @"C:\unitTesting\a", true));
-                        Assert.AreEqual(0, string.Compare(listPath[2], @"C:\unitTesting\b", true));
+                        Assert.AreEqual(0, string.Compare(listPath[0].DirectoryPath, @"C:\unitTesting", true));
+                        Assert.AreEqual(0, string.Compare(listPath[1].DirectoryPath, @"C:\unitTesting\a", true));
+                        Assert.AreEqual(0, string.Compare(listPath[2].DirectoryPath, @"C:\unitTesting\b", true));
                         count++;
                     }
                     else if (count == 2)
@@ -123,18 +123,18 @@ namespace MSTestAdapter.PlatformServices.Desktop.UnitTests
                         // Third time SearchAssemblyInTheFollowingLocation should get call with directory C:\FunctionalTesting
                         // as its isRecursive property is false
                         Assert.AreEqual(1, listPath.Count);
-                        Assert.AreEqual(0, string.Compare(listPath[0], @"C:\FunctionalTesting", true));
+                        Assert.AreEqual(0, string.Compare(listPath[0].DirectoryPath, @"C:\FunctionalTesting", true));
                         count++;
                     }
                     else if (count == 3)
                     {
                         // call will come here when we will call onResolve second time.
                         Assert.AreEqual(5, listPath.Count);
-                        Assert.AreEqual(0, string.Compare(listPath[0], dummyDirectories[0], true));
-                        Assert.AreEqual(0, string.Compare(listPath[1], @"C:\unitTesting", true));
-                        Assert.AreEqual(0, string.Compare(listPath[2], @"C:\unitTesting\a", true));
-                        Assert.AreEqual(0, string.Compare(listPath[3], @"C:\unitTesting\b", true));
-                        Assert.AreEqual(0, string.Compare(listPath[4], @"C:\FunctionalTesting", true));
+                        Assert.AreEqual(0, string.Compare(listPath[0].DirectoryPath, dummyDirectories[0], true));
+                        Assert.AreEqual(0, string.Compare(listPath[1].DirectoryPath, @"C:\unitTesting", true));
+                        Assert.AreEqual(0, string.Compare(listPath[2].DirectoryPath, @"C:\unitTesting\a", true));
+                        Assert.AreEqual(0, string.Compare(listPath[3].DirectoryPath, @"C:\unitTesting\b", true));
+                        Assert.AreEqual(0, string.Compare(listPath[4].DirectoryPath, @"C:\FunctionalTesting", true));
                         count++;
                     }
 
@@ -209,7 +209,7 @@ namespace MSTestAdapter.PlatformServices.Desktop.UnitTests
 
         public Func<string, Assembly> ReflectionOnlyLoadAssemblyFromSetter { get; set; }
 
-        public Func<List<string>, string, bool, Assembly> SearchAssemblySetter { get; internal set; }
+        public Func<List<RecursiveDirectoryPath>, string, bool, Assembly> SearchAssemblySetter { get; internal set; }
 
         protected override bool DoesDirectoryExist(string path)
         {
@@ -231,7 +231,7 @@ namespace MSTestAdapter.PlatformServices.Desktop.UnitTests
             return this.GetDirectoriesSetter(path);
         }
 
-        protected override Assembly SearchAssembly(List<string> searchDirectorypaths, string name, bool isReflectionOnly)
+        protected override Assembly SearchAssembly(List<RecursiveDirectoryPath> searchDirectorypaths, string name, bool isReflectionOnly)
         {
             if (this.SearchAssemblySetter == null)
             {
